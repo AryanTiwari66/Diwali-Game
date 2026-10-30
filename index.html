@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diwali Party Game 🪔</title>
+<style>
+  :root{
+    --bg1:#2b0a3d; --bg2:#5a1459; --gold:#ffc94a; --orange:#ff7a1a; --card:#fff6e0; --ink:#3a1030;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; font-family:"Segoe UI",system-ui,sans-serif; color:#fff;
+    background:radial-gradient(circle at 20% 0%,var(--bg2),var(--bg1) 60%);
+    padding:20px;
+  }
+  h1{text-align:center;margin:6px 0 4px;color:var(--gold);letter-spacing:1px}
+  .sub{text-align:center;opacity:.8;margin-bottom:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .hidden{display:none!important}
+
+  /* Setup */
+  .players{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .pcard{background:rgba(255,255,255,.08);border:1px solid rgba(255,201,74,.35);border-radius:14px;padding:14px}
+  .pcard h3{margin:0 0 10px;color:var(--gold)}
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .nums input{
+    width:100%;padding:10px;border-radius:8px;border:2px solid transparent;font-size:18px;text-align:center;
+    background:#fff;color:var(--ink);
+  }
+  .nums input.bad{border-color:#ff4d4d;background:#ffe3e3}
+  .elim{margin-top:10px;display:flex;align-items:center;gap:8px}
+  .elim select{flex:1;padding:9px;border-radius:8px;font-size:16px}
+  .msg{margin:14px 0;text-align:center;min-height:24px;color:#ffb0b0;font-weight:600}
+  button{
+    background:linear-gradient(180deg,var(--gold),var(--orange));color:#3a1030;border:0;
+    padding:12px 26px;font-size:17px;font-weight:700;border-radius:30px;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.35)
+  }
+  button.ghost{background:transparent;color:var(--gold);border:2px solid var(--gold);box-shadow:none;padding:8px 18px;font-size:14px}
+  .center{text-align:center}
+
+  /* Reveal */
+  .bar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .filters{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:6px 14px;border-radius:20px;border:1px solid var(--gold);cursor:pointer;font-size:14px;color:var(--gold);user-select:none}
+  .chip.on{background:var(--gold);color:var(--ink);font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .flip{perspective:900px;height:320px;cursor:pointer}
+  .inner{position:relative;width:100%;height:100%;transition:transform .6s;transform-style:preserve-3d}
+  .flip.open .inner{transform:rotateY(180deg)}
+  .face{
+    position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;padding:16px;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+    box-shadow:0 6px 18px rgba(0,0,0,.4)
+  }
+  .front{background:linear-gradient(145deg,#8a1f5c,#d9432c);border:3px solid var(--gold)}
+  .front .no{font-size:64px;font-weight:800;color:var(--gold);line-height:1}
+  .front .own{margin-top:10px;font-size:20px;background:rgba(0,0,0,.28);padding:4px 16px;border-radius:20px}
+  .front .tap{margin-top:12px;font-size:12px;opacity:.8}
+  .back{background:var(--card);color:var(--ink);transform:rotateY(180deg);border:3px solid var(--orange);overflow:auto;justify-content:flex-start;align-items:flex-start;text-align:left}
+  .back .tag{font-size:12px;font-weight:700;color:#b3430c;letter-spacing:1px}
+  .back h4{margin:6px 0;font-size:17px}
+  .back p{margin:6px 0 0;font-size:14.5px;line-height:1.4}
+  .count{font-size:15px}
+  .diya{font-size:28px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="diya">🪔</span> Diwali Party Game <span class="diya">🪔</span></h1>
+  <div class="sub" id="sub">Enter each player's 4 numbers (1–20) and the one they eliminated</div>
+
+  <!-- SETUP -->
+  <section id="setup">
+    <div class="players" id="players"></div>
+    <div class="msg" id="msg"></div>
+    <div class="center"><button id="startBtn">Reveal the Scenarios ✨</button></div>
+  </section>
+
+  <!-- REVEAL -->
+  <section id="reveal" class="hidden">
+    <div class="bar">
+      <div class="filters" id="filters"></div>
+      <div class="count" id="count"></div>
+      <div>
+        <button class="ghost" id="flipAll">Flip all</button>
+        <button class="ghost" id="backBtn">← Edit setup</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+</div>
+
+<script>
+/* ======= YOUR 20 SCENARIOS (shuffled order, number = position) ======= */
+const SCENARIOS = [
+  /* 1 */  {t:"Trip Choice", d:"Would you rather go on a small trip with your partner, or go to a match, concert or fun trip with your friends?"},
+  /* 2 */  {t:"Friend's Bad Habit", d:"Your friend is falling into a bad habit, but he doesn't take criticism well. His girlfriend is pressuring you to talk to him. What would you do?"},
+  /* 3 */  {t:"Sandpaper or Hot Sauce", d:"Would you rather use sandpaper as toilet paper, or hot sauce as eye drops?"},
+  /* 4 */  {t:"The Cook", d:"You have a cook who makes amazing food, and your family depends on him. He doesn't follow your wife's orders, though he never disrespects her, and she thinks it's a problem. Would you fire him or not? (Male players only.)"},
+  /* 5 */  {t:"The Dream Move", d:"You are in a healthy relationship, but you get the opportunity of a lifetime to move to another city or country for your dream job. Your partner is completely against moving and doesn't want a long-distance relationship. What would you do?"},
+  /* 6 */  {t:"The Party Flirt", d:"At a party, your friend (a guy) is openly flirting with another girl while his girlfriend is not there. She is also your friend. Would you tell her or not, and how?"},
+  /* 7 */  {t:"The Casting Offer", d:"Your partner is a normal person working in a corporate job. A casting director randomly picked them and offered ₹15 lakh for a scene that involves a kiss. Your partner has said no. Would you let them do it or not?"},
+  /* 8 */  {t:"Short on Time", d:"You are short on time and want to have a fun time. Which one position would you go for?"},
+  /* 9 */  {t:"Partner's Ex", d:"You accidentally find out that your partner is talking to their ex, but you don't know the full context. What would you do?"},
+  /* 10 */ {t:"Family Match", d:"Would you rather date someone who is rich, good-looking and funny but doesn't get along with your family, or someone who is great with your family, funny and rich but not good-looking?"},
+  /* 11 */ {t:"Crush's Traits", d:"Your crush has mentioned a few things they like in a partner, and some of those traits are not you. You genuinely like them, and they seem to like you back. Would you change yourself if those traits were dealbreakers for them?"},
+  /* 12 */ {t:"Say It All", d:"Would you rather say everything you think, or never speak again?"},
+  /* 13 */ {t:"Nobody Likes Her", d:"You have a loving, caring girlfriend and everything is good between you, but none of your family or friends like her at all. Nobody is giving you an honest answer. Would you dump her, or end your relationships with your friends and family?"},
+  /* 14 */ {t:"The Third Person", d:"Your partner wants to invite someone else into your intimate moments. Would you be okay with it?"},
+  /* 15 */ {t:"Matchmaker", d:"Pick one person from the current group and one person from the outside world who you think would go well together. Give a reason as well."},
+  /* 16 */ {t:"The Ex Returns", d:"Your ex, with whom you had a great relationship, is trying to get back together. Meanwhile, you have just started a new relationship, which is not perfect. What would you do?"},
+  /* 17 */ {t:"Blackmail?", d:"You recently joined a company, and your manager, a very influential person, has been bullying you for a while. Now you have found out a secret about them. Would you blackmail them?"},
+  /* 18 */ {t:"Celebrity Crush", d:"You get the chance to spend some time with your celebrity crush, who is up for anything. Name the celebrity and the one thing you would do."},
+  /* 19 */ {t:"Angry Partner", d:"At a function, a relative says something to your partner that they didn't like. You think it's a small issue, but your partner is very angry. What would you do at the function?"},
+  /* 20 */ {t:"Looks vs Bedroom", d:"Would you rather date someone who is good-looking and funny but not great in bed, or someone who is great in bed but slightly boring and average-looking?"}
+];
+const PLAYERS = ["Anish","Atman","Aniket","Rucha","Savani"];
+/* ===================================================================== */
+
+const $ = s => document.querySelector(s);
+const playersEl = $("#players");
+
+// Build setup form
+PLAYERS.forEach((p,i)=>{
+  const d = document.createElement("div");
+  d.className="pcard";
+  d.innerHTML = `
+    <h3>${p}</h3>
+    <div class="nums">
+      ${[0,1,2,3].map(k=>`<input type="number" min="1" max="20" data-p="${i}" data-k="${k}" placeholder="#">`).join("")}
+    </div>
+    <div class="elim">
+      <label>Eliminated:</label>
+      <select data-elim="${i}"><option value="">— pick —</option></select>
+    </div>`;
+  playersEl.appendChild(d);
+});
+
+function inputsOf(i){ return [...document.querySelectorAll(`input[data-p="${i}"]`)]; }
+
+// Keep eliminate dropdown synced with the player's numbers
+document.querySelectorAll(".nums input").forEach(inp=>{
+  inp.addEventListener("input",()=>{
+    const i = inp.dataset.p;
+    const sel = document.querySelector(`select[data-elim="${i}"]`);
+    const prev = sel.value;
+    const vals = inputsOf(i).map(x=>x.value.trim()).filter(Boolean);
+    sel.innerHTML = '<option value="">— pick —</option>' + vals.map(v=>`<option value="${v}">${v}</option>`).join("");
+    if(vals.includes(prev)) sel.value = prev;
+    document.querySelectorAll(".nums input").forEach(x=>x.classList.remove("bad"));
+    $("#msg").textContent="";
+  });
+});
+
+let data = []; // [{player, nums, elim}]
+
+$("#startBtn").onclick = () => {
+  const msg = $("#msg");
+  document.querySelectorAll(".nums input").forEach(x=>x.classList.remove("bad"));
+  const seen = {};
+  const result = [];
+  for(let i=0;i<PLAYERS.length;i++){
+    const ins = inputsOf(i);
+    const nums = ins.map(x=>parseInt(x.value,10));
+    if(nums.some(n=>isNaN(n)||n<1||n>SCENARIOS.length)){
+      ins.forEach(x=>{ const n=parseInt(x.value,10); if(isNaN(n)||n<1||n>SCENARIOS.length) x.classList.add("bad"); });
+      msg.textContent = `${PLAYERS[i]}: enter 4 numbers between 1 and ${SCENARIOS.length}.`; return;
+    }
+    for(const x of ins){
+      const n = parseInt(x.value,10);
+      if(seen[n]!==undefined){
+        x.classList.add("bad");
+        msg.textContent = `Number ${n} is used by both ${PLAYERS[seen[n]]} and ${PLAYERS[i]}.`; return;
+      }
+      seen[n]=i;
+    }
+    const elim = parseInt(document.querySelector(`select[data-elim="${i}"]`).value,10);
+    if(isNaN(elim)){ msg.textContent = `${PLAYERS[i]}: pick the eliminated scenario.`; return; }
+    result.push({player:PLAYERS[i], nums, elim});
+  }
+  data = result;
+  buildReveal();
+};
+
+let filter = "All";
+
+function buildReveal(){
+  $("#setup").classList.add("hidden");
+  $("#reveal").classList.remove("hidden");
+  $("#sub").textContent = "Click a card to reveal the scenario!";
+  filter = "All";
+  renderFilters();
+  renderGrid();
+}
+
+function renderFilters(){
+  const f = $("#filters"); f.innerHTML="";
+  ["All",...PLAYERS].forEach(n=>{
+    const c = document.createElement("div");
+    c.className="chip"+(filter===n?" on":"");
+    c.textContent=n;
+    c.onclick=()=>{filter=n;renderFilters();renderGrid();};
+    f.appendChild(c);
+  });
+}
+
+function renderGrid(){
+  const g = $("#grid"); g.innerHTML="";
+  const cards = [];
+  data.forEach(p=>{
+    p.nums.filter(n=>n!==p.elim).forEach(n=>cards.push({n,owner:p.player}));
+  });
+  cards.sort((a,b)=>a.n-b.n);
+  cards.filter(c=>filter==="All"||c.owner===filter).forEach(c=>{
+    const s = SCENARIOS[c.n-1];
+    const el = document.createElement("div");
+    el.className="flip";
+    el.innerHTML = `
+      <div class="inner">
+        <div class="face front">
+          <div class="no">#${c.n}</div>
+          <div class="own">${c.owner}</div>
+          <div class="tap">tap to reveal</div>
+        </div>
+        <div class="face back">
+          <div class="tag">#${c.n} · ${c.owner.toUpperCase()}</div>
+          <h4>${s.t}</h4>
+          <p>${s.d}</p>
+        </div>
+      </div>`;
+    el.onclick=()=>{el.classList.toggle("open");updateCount();};
+    g.appendChild(el);
+  });
+  updateCount();
+}
+
+function updateCount(){
+  const all = document.querySelectorAll(".flip");
+  const open = document.querySelectorAll(".flip.open");
+  $("#count").textContent = `${open.length} / ${all.length} revealed`;
+}
+
+$("#flipAll").onclick = () => {
+  const all = [...document.querySelectorAll(".flip")];
+  const anyClosed = all.some(x=>!x.classList.contains("open"));
+  all.forEach(x=>x.classList.toggle("open",anyClosed));
+  updateCount();
+};
+
+$("#backBtn").onclick = () => {
+  $("#reveal").classList.add("hidden");
+  $("#setup").classList.remove("hidden");
+  $("#sub").textContent = "Enter each player's 4 numbers (1–20) and the one they eliminated";
+};
+</script>
+</body>
+</html>
