@@ -30,6 +30,20 @@
   button:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
   button.ghost{background:transparent;color:var(--gold);border:2px solid var(--gold);box-shadow:none;padding:8px 18px;font-size:14px}
 
+  /* Spin wheel */
+  .wheelwrap{position:relative;width:320px;max-width:86vw;margin:10px auto 20px;aspect-ratio:1}
+  #wheelSvg{width:100%;height:100%;transform-origin:50% 50%;
+    transition:transform 4.6s cubic-bezier(.16,.72,.12,1);filter:drop-shadow(0 8px 22px rgba(0,0,0,.45))}
+  .pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:3;
+    font-size:30px;color:var(--gold);filter:drop-shadow(0 2px 3px rgba(0,0,0,.6));line-height:1}
+  .lineup{max-width:420px;margin:14px auto 0;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,201,74,.35);border-radius:18px;padding:18px 22px}
+  .lineup h3{margin:0 0 10px;color:var(--gold);text-align:center}
+  .lineup ol{margin:0;padding-left:0;list-style:none}
+  .lineup li{display:flex;align-items:center;gap:10px;font-size:18px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+  .lineup li:last-child{border-bottom:0}
+  .lineup li .pos{width:30px;text-align:center;font-weight:800;color:var(--gold)}
+
   /* Hand-off gate */
   .gate{max-width:480px;margin:40px auto;text-align:center;background:rgba(255,255,255,.06);
     border:1px solid rgba(255,201,74,.35);border-radius:20px;padding:40px 24px}
@@ -91,8 +105,22 @@
 <body>
 <div class="wrap">
   <h1><span class="diya">🪔</span> Diwali Party Game <span class="diya">🪔</span></h1>
-  <div class="sub" id="sub">Pass the phone around — one player at a time</div>
+  <div class="sub" id="sub">Spin the wheel to set the turn order</div>
   <div class="progress" id="progress"></div>
+
+  <!-- SPIN WHEEL -->
+  <section id="wheel">
+    <div class="wheelwrap">
+      <div class="pointer">▼</div>
+      <svg id="wheelSvg" viewBox="0 0 300 300" aria-label="Turn order wheel"></svg>
+    </div>
+    <div class="center"><button id="spinBtn">Spin the wheel 🎡</button></div>
+    <div class="lineup hidden" id="lineup">
+      <h3>Turn order 🎉</h3>
+      <ol id="lineupList"></ol>
+      <div class="center" style="margin-top:16px"><button id="startGameBtn">Start the game →</button></div>
+    </div>
+  </section>
 
   <!-- HAND-OFF GATE -->
   <section id="gate" class="hidden">
@@ -162,36 +190,113 @@ const SCENARIOS = [
   /* 20 */ {t:"Looks vs Bedroom", d:"Would you rather date someone who is good-looking and funny but not great in bed, or someone who is great in bed but slightly boring and average-looking?"}
 ];
 const PLAYERS = ["Anish","Atman","Aniket","Rucha","Savani"];
+const WHEEL_COLORS = ["#7b1fa2","#c2185b","#d32f2f","#f57c00","#ad1457"];
 const N = SCENARIOS.length;
 /* ===================================================================== */
 
 const $ = s => document.querySelector(s);
+const SVGNS = "http://www.w3.org/2000/svg";
 
-let cur = 0;            // current player index
-const picks = {};       // i -> [nums]
-const elim = {};        // i -> eliminated num
-let selected = [];      // working selection during pick
-let chosenElim = null;  // working choice during decide
+let turnOrder = [...PLAYERS]; // decided by the wheel
+let cur = 0;                  // current position in turnOrder
+const picks = {};             // pos -> [nums]
+const elim = {};              // pos -> eliminated num
+let selected = [];            // working selection during pick
+let chosenElim = null;        // working choice during decide
+let spinRotation = 0;         // cumulative wheel rotation
 
-const show = id => ["gate","pick","decide","reveal"].forEach(s=>$("#"+s).classList.toggle("hidden", s!==id));
+const SECTIONS = ["wheel","gate","pick","decide","reveal"];
+const show = id => SECTIONS.forEach(s=>$("#"+s).classList.toggle("hidden", s!==id));
 
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
 function takenNumbers(){
   const t = new Set();
   Object.values(picks).forEach(arr => arr.forEach(n => t.add(n)));
   return t;
 }
-
 function setProgress(){
-  $("#progress").textContent = cur < PLAYERS.length
-    ? `Player ${cur+1} of ${PLAYERS.length}`
-    : `All ${PLAYERS.length} done`;
+  $("#progress").textContent = cur < turnOrder.length
+    ? `Player ${cur+1} of ${turnOrder.length}`
+    : `All ${turnOrder.length} done`;
 }
+
+/* ---------- Spin wheel ---------- */
+const SEG = 360 / PLAYERS.length;      // degrees per segment
+function pt(cx,cy,r,deg){ const a=(deg-90)*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+
+function buildWheel(){
+  const svg = $("#wheelSvg");
+  svg.innerHTML = "";
+  const cx=150, cy=150, r=146;
+  PLAYERS.forEach((name,i)=>{
+    const a0 = i*SEG, a1 = (i+1)*SEG;
+    const [x0,y0]=pt(cx,cy,r,a0), [x1,y1]=pt(cx,cy,r,a1);
+    const path = document.createElementNS(SVGNS,"path");
+    path.setAttribute("d", `M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 0 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z`);
+    path.setAttribute("fill", WHEEL_COLORS[i % WHEEL_COLORS.length]);
+    path.setAttribute("stroke", "#ffc94a");
+    path.setAttribute("stroke-width", "2");
+    svg.appendChild(path);
+    // label
+    const [lx,ly]=pt(cx,cy,r*0.62,a0+SEG/2);
+    const txt = document.createElementNS(SVGNS,"text");
+    txt.setAttribute("x", lx.toFixed(2));
+    txt.setAttribute("y", ly.toFixed(2));
+    txt.setAttribute("fill", "#fff");
+    txt.setAttribute("font-size", "16");
+    txt.setAttribute("font-weight", "800");
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("dominant-baseline", "central");
+    txt.setAttribute("transform", `rotate(${a0+SEG/2} ${lx.toFixed(2)} ${ly.toFixed(2)})`);
+    txt.textContent = name;
+    svg.appendChild(txt);
+  });
+  // hub
+  const hub = document.createElementNS(SVGNS,"circle");
+  hub.setAttribute("cx",cx); hub.setAttribute("cy",cy); hub.setAttribute("r","26");
+  hub.setAttribute("fill","#2b0a3d"); hub.setAttribute("stroke","#ffc94a"); hub.setAttribute("stroke-width","3");
+  svg.appendChild(hub);
+  const diya = document.createElementNS(SVGNS,"text");
+  diya.setAttribute("x",cx); diya.setAttribute("y",cy+1);
+  diya.setAttribute("font-size","26"); diya.setAttribute("text-anchor","middle");
+  diya.setAttribute("dominant-baseline","central"); diya.textContent="🪔";
+  svg.appendChild(diya);
+}
+
+$("#spinBtn").onclick = () => {
+  $("#spinBtn").disabled = true;
+  turnOrder = shuffle(PLAYERS);
+  const firstIdx = PLAYERS.indexOf(turnOrder[0]);   // wheel position of the winner
+  const center = firstIdx*SEG + SEG/2;              // that segment's center angle
+  const jitter = (Math.random()-0.5) * (SEG*0.7);   // land somewhere inside the segment
+  // rotate so the winner's segment ends up under the top pointer (clockwise)
+  spinRotation += 360*6 + (360 - center) - jitter;
+  $("#wheelSvg").style.transform = `rotate(${spinRotation}deg)`;
+  setTimeout(revealLineup, 4800);
+};
+
+function revealLineup(){
+  const list = $("#lineupList"); list.innerHTML="";
+  const medals = ["🥇","🥈","🥉","🎖️","🎖️"];
+  turnOrder.forEach((name,i)=>{
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="pos">${i+1}</span><span>${medals[i]||""} ${name}</span>`;
+    list.appendChild(li);
+  });
+  $("#lineup").classList.remove("hidden");
+  $("#sub").textContent = `${turnOrder[0]} goes first!`;
+}
+$("#startGameBtn").onclick = () => startTurn(0);
 
 /* ---------- Hand-off gate ---------- */
 function startTurn(i){
   cur = i;
   setProgress();
-  $("#gateWho").textContent = PLAYERS[i];
+  $("#gateWho").textContent = turnOrder[i];
   $("#gateNote").textContent = i===0
     ? "You're up first. Tap below when you're ready."
     : "Pass the phone to them, then tap below.";
@@ -204,7 +309,7 @@ $("#gateBtn").onclick = () => showPick();
 function showPick(){
   selected = [];
   chosenElim = null;
-  $("#pickWho").textContent = PLAYERS[cur] + "'s picks";
+  $("#pickWho").textContent = turnOrder[cur] + "'s picks";
   $("#selCount").textContent = "0";
   $("#lockBtn").disabled = true;
   const taken = takenNumbers();
@@ -239,7 +344,7 @@ $("#lockBtn").onclick = () => {
 /* ---------- Decide / eliminate ---------- */
 function showDecide(){
   chosenElim = null;
-  $("#decideWho").textContent = PLAYERS[cur] + ", your scenarios";
+  $("#decideWho").textContent = turnOrder[cur] + ", your scenarios";
   $("#decideMsg").textContent = "";
   $("#confirmBtn").disabled = true;
   const c = $("#choices"); c.innerHTML = "";
@@ -266,7 +371,7 @@ function showDecide(){
 $("#confirmBtn").onclick = () => {
   if(chosenElim===null){ $("#decideMsg").textContent = "Tap a scenario to eliminate first."; return; }
   elim[cur] = chosenElim;
-  if(cur < PLAYERS.length-1){ startTurn(cur+1); }
+  if(cur < turnOrder.length-1){ startTurn(cur+1); }
   else { buildReveal(); }
 };
 
@@ -283,7 +388,7 @@ function buildReveal(){
 }
 function renderFilters(){
   const f = $("#filters"); f.innerHTML="";
-  ["All",...PLAYERS].forEach(n=>{
+  ["All",...turnOrder].forEach(n=>{
     const c = document.createElement("div");
     c.className="chip"+(filter===n?" on":"");
     c.textContent=n;
@@ -294,7 +399,7 @@ function renderFilters(){
 function renderGrid(){
   const g = $("#grid"); g.innerHTML="";
   const cards = [];
-  PLAYERS.forEach((p,i)=>{
+  turnOrder.forEach((p,i)=>{
     (picks[i]||[]).filter(n=>n!==elim[i]).forEach(n=>cards.push({n,owner:p}));
   });
   cards.sort((a,b)=>a.n-b.n);
@@ -334,11 +439,17 @@ $("#flipAll").onclick = () => {
 $("#restartBtn").onclick = () => {
   Object.keys(picks).forEach(k=>delete picks[k]);
   Object.keys(elim).forEach(k=>delete elim[k]);
-  startTurn(0);
+  $("#lineup").classList.add("hidden");
+  $("#spinBtn").disabled = false;
+  $("#sub").textContent = "Spin the wheel to set the turn order";
+  $("#progress").textContent = "";
+  show("wheel");
 };
 
 /* ---------- Boot ---------- */
-startTurn(0);
+buildWheel();
+show("wheel");
+$("#progress").textContent = "";
 </script>
 </body>
 </html>
